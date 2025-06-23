@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <title>Photobooth</title>
+  <style>
+    video {
+      width: 360px;
+      aspect-ratio: 3/4;
+      display: block;
+      margin: 10px auto;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.3);
+    }
+    canvas { display: none; }
+    button, select {
+      padding: 10px 20px;
+      display: block;
+      margin: 10px auto;
+      font-size: 16px;
+    }
+
+    .frame {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .frame img {
+      position: absolute;
+      top: 8.45vw;
+      width: 205px;
+    }
+  </style>
+</head>
+<body>
+  <h2 style="text-align:center;">📸 Photobooth</h2>\
+  <div class="frame">
+    <video id="video" autoplay playsinline></video>
+    <img src="/static/frames/frame1.png" alt="">
+    <canvas id="canvas"></canvas>
+  </div>
+  
+
+  <label for="frameSelect" style="display:block; text-align:center;">Pilih Frame:</label>
+  <select id="frameSelect">
+    <option value="frame1.png">Frame 1</option>
+    <option value="frame2.png">Frame 2</option>
+    <option value="frame3.png">Frame 3</option>
+    <option value="frame4.png">Frame 4</option>
+    <option value="frame5.png">Frame 5</option>
+  </select>
+
+  <button onclick="takePhoto()">Ambil Foto</button>
+
+  <script>
+    const video = document.getElementById('video');
+    const canvas = document.getElementById('canvas');
+
+    // Aktifkan webcam
+    navigator.mediaDevices.getUserMedia({ video: true })
+      .then(stream => {
+        video.srcObject = stream;
+        video.play();
+      })
+      .catch(error => {
+        alert("Gagal mengakses kamera: " + error);
+      });
+
+    function takePhoto() {
+      const context = canvas.getContext('2d');
+
+      // Target ukuran output (sama dengan server: 1080x1440)
+      const targetWidth = 1080;
+      const targetHeight = 1440;
+      const targetRatio = targetWidth / targetHeight;
+
+      // Atur resolusi canvas secara nyata (bukan hanya style)
+      canvas.width = targetWidth;
+      canvas.height = targetHeight;
+
+      // Ambil ukuran asli dari kamera
+      const videoWidth = video.videoWidth;
+      const videoHeight = video.videoHeight;
+      const videoRatio = videoWidth / videoHeight;
+
+      // Tentukan area crop dari kamera agar pas dengan frame
+      let sx, sy, sw, sh;
+
+      if (videoRatio > targetRatio) {
+        // Kamera lebih lebar dari frame target: crop kiri-kanan
+        sh = videoHeight;
+        sw = sh * targetRatio;
+        sx = (videoWidth - sw) / 2;
+        sy = 0;
+      } else {
+        // Kamera lebih tinggi dari frame target: crop atas-bawah
+        sw = videoWidth;
+        sh = sw / targetRatio;
+        sx = 0;
+        sy = (videoHeight - sh) / 2;
+      }
+
+      // Gambar hasil webcam ke canvas (dengan crop proporsional)
+      context.drawImage(video, sx, sy, sw, sh, 0, 0, targetWidth, targetHeight);
+
+      // Convert hasil ke dataURL
+      const dataURL = canvas.toDataURL('image/png');
+
+      // Ambil frame pilihan user
+      const selectedFrame = document.getElementById('frameSelect').value;
+
+      // Kirim ke server
+      fetch('/save-photo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          image: dataURL,
+          frame: selectedFrame
+        })
+      })
+      .then(res => res.blob())
+      .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'photobooth.png';
+        link.click();
+      });
+    }
+  </script>
+</body>
+</html>
